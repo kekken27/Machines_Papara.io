@@ -310,6 +310,7 @@
             localStorage.setItem('rooms', JSON.stringify(rooms));
             localStorage.setItem('history', JSON.stringify(history));
             localStorage.setItem('resources', JSON.stringify(resources));
+            
         }
 
         function exportData() {
@@ -321,6 +322,10 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+            const saveResult = await saveToGitHub();
+                        if (saveResult) {
+                            alert("Données locales sauvegardées sur GitHub avec succès.");
+                        }
         }
 
         function importData(event) {
