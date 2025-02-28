@@ -1,0 +1,70 @@
+{
+  "machines": [
+    {
+      "id": 1,
+      "name": "Station de pompage",
+      "room": "Atelier électrotechnique",
+      "status": "En service"
+    },
+    {
+      "id": 2,
+      "name": "Monte charge",
+      "room": "Atelier électrotechnique",
+      "status": "En service"
+    },
+    {
+      "id": 3,
+      "name": "TGBT",
+      "room": "Atelier électrotechnique",
+      "status": "En service"
+    },
+    {
+      "id": 4,
+      "name": "Ciné 3sa",
+      "room": "Atelier électrotechnique",
+      "status": "En service"
+    },
+    {
+      "id": 5,
+      "name": "Banc de mesure eTGBT",
+      "room": "Atelier électrotechnique",
+      "status": "En service"
+    },
+    {
+      "id": 6,
+      "name": "Ecol Feu tricolore",
+      "room": "Atelier électrotechnique",
+      "status": "En service"
+    },
+    {
+      "id": 7,
+      "name": "Borne de recharge ",
+      "room": "Atelier Melec",
+      "status": "En service"
+    }
+  ],
+  "rooms": [
+    "Atelier électrotechnique",
+    "Atelier Melec",
+    "B13 Exp Term",
+    "B14 Réal Term"
+  ],
+  "history": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": [],
+    "5": [],
+    "6": [],
+    "7": []
+  },
+  "resources": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": [],
+    "5": [],
+    "6": [],
+    "7": []
+  }
+}
