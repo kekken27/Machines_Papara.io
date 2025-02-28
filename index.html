@@ -137,8 +137,8 @@
         // Fonction pour enregistrer les identifiants GitHub
         function saveGitHubCredentials() {
             githubCredentials = {
-                owner: document.getElementById("repo-owner").value,
-                repo: document.getElementById("repo-name").value,
+                owner: document.getElementById("repo-owner").value || 'kekken27',
+                repo: document.getElementById("repo-name").value || 'Machines_Papara.io',
                 token: document.getElementById("github-token").value,
                 filename: document.getElementById("data-filename").value || 'gmao_data.json'
             };
