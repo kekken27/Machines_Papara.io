@@ -41,6 +41,12 @@
       "name": "Borne de recharge ",
       "room": "Atelier Melec",
       "status": "En service"
+    },
+    {
+      "id": 8,
+      "name": "toto",
+      "room": "Atelier électrotechnique",
+      "status": "En service"
     }
   ],
   "rooms": [
@@ -56,7 +62,8 @@
     "4": [],
     "5": [],
     "6": [],
-    "7": []
+    "7": [],
+    "8": []
   },
   "resources": {
     "1": [],
@@ -65,6 +72,7 @@
     "4": [],
     "5": [],
     "6": [],
-    "7": []
+    "7": [],
+    "8": []
   }
 }
