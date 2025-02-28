@@ -304,6 +304,14 @@
                 updateSyncStatus("Erreur de synchronisation");
             }
         }
+
+        // Fonction pour synchroniser exporter vers GitHub (sauvegarder)
+        async function synctoGitHub() {
+            const saveResult = await saveToGitHub();
+                if (saveResult) {
+                    alert("Données locales sauvegardées sur GitHub avec succès.");
+                }
+        }
         
         // Fonction pour sauvegarder les données localement
         function saveData() {
