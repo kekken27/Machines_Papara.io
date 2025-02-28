@@ -26,11 +26,26 @@
         .history-item { padding: 4px; border-bottom: 1px solid #eee; }
         .history-panne { color: #d9534f; }
         .history-resolution { color: #5cb85c; }
+        #sync-status { padding: 5px 10px; background-color: #dff0d8; color: #3c763d; display: inline-block; margin-bottom: 10px; border-radius: 3px; }
+        #github-auth { padding: 10px; margin-bottom: 15px; background-color: #f8f9fa; border-radius: 5px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Gestion des Machines & Salles</h1>
+        
+        <div id="sync-status">Synchronisation : En attente...</div>
+        
+        <div id="github-auth">
+            <p>Pour synchroniser les données avec GitHub :</p>
+            <div class="form-group">
+                <input type="text" id="repo-owner" placeholder="Propriétaire du dépôt (ex: kekken27)">
+                <input type="text" id="repo-name" placeholder="Nom du dépôt (ex: Machines_Papara.io)">
+                <input type="text" id="github-token" placeholder="Token d'accès GitHub (généré dans les paramètres)">
+                <input type="text" id="data-filename" placeholder="Nom du fichier de données (ex: gmao_data.json)" value="gmao_data.json">
+                <button class="btn" onclick="saveGitHubCredentials()">Enregistrer les identifiants</button>
+            </div>
+        </div>
         
         <div class="form-group">
             <input type="text" id="roomName" placeholder="Nom de la salle">
@@ -45,6 +60,7 @@
             <button class="btn btn-warning" onclick="showDeleteMachinesModal()">Supprimer Machine</button>
         </div>
         
+        <button class="btn" onclick="syncWithGitHub()">Synchroniser avec GitHub</button>
         <button class="btn" onclick="exportData()">Exporter les données</button>
         <input type="file" id="importFile" onchange="importData(event)">
         
@@ -87,11 +103,208 @@
     </div>
     
     <script>
+        // Variables pour les données
         let machines = JSON.parse(localStorage.getItem('machines')) || [];
         let rooms = JSON.parse(localStorage.getItem('rooms')) || [];
         let history = JSON.parse(localStorage.getItem('history')) || {};
         let resources = JSON.parse(localStorage.getItem('resources')) || {};
-
+        
+        // Variables pour l'authentification GitHub
+        let githubCredentials = JSON.parse(localStorage.getItem('githubCredentials')) || {
+            owner: '',
+            repo: '',
+            token: '',
+            filename: 'gmao_data.json'
+        };
+        
+        // Fonction pour mettre à jour le statut de synchronisation
+        function updateSyncStatus(status) {
+            const syncStatus = document.getElementById("sync-status");
+            syncStatus.textContent = "Synchronisation : " + status;
+            
+            if (status === "Synchronisé") {
+                syncStatus.style.backgroundColor = "#dff0d8";
+                syncStatus.style.color = "#3c763d";
+            } else if (status === "En cours...") {
+                syncStatus.style.backgroundColor = "#fcf8e3";
+                syncStatus.style.color = "#8a6d3b";
+            } else {
+                syncStatus.style.backgroundColor = "#f2dede";
+                syncStatus.style.color = "#a94442";
+            }
+        }
+        
+        // Fonction pour enregistrer les identifiants GitHub
+        function saveGitHubCredentials() {
+            githubCredentials = {
+                owner: document.getElementById("repo-owner").value,
+                repo: document.getElementById("repo-name").value,
+                token: document.getElementById("github-token").value,
+                filename: document.getElementById("data-filename").value || 'gmao_data.json'
+            };
+            
+            localStorage.setItem('githubCredentials', JSON.stringify(githubCredentials));
+            alert("Identifiants GitHub enregistrés");
+            
+            // Afficher les valeurs actuelles dans les champs
+            document.getElementById("repo-owner").value = githubCredentials.owner;
+            document.getElementById("repo-name").value = githubCredentials.repo;
+            document.getElementById("github-token").value = githubCredentials.token;
+            document.getElementById("data-filename").value = githubCredentials.filename;
+        }
+        
+        // Fonction pour charger les données depuis GitHub
+        async function loadFromGitHub() {
+            try {
+                updateSyncStatus("Chargement depuis GitHub...");
+                
+                if (!githubCredentials.owner || !githubCredentials.repo || !githubCredentials.token) {
+                    throw new Error("Identifiants GitHub manquants");
+                }
+                
+                const url = `https://api.github.com/repos/${githubCredentials.owner}/${githubCredentials.repo}/contents/${githubCredentials.filename}`;
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `token ${githubCredentials.token}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                
+                if (response.status === 404) {
+                    // Le fichier n'existe pas encore, on va le créer lors du premier saveToGitHub
+                    updateSyncStatus("Fichier non trouvé, sera créé à la première sauvegarde");
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`Erreur GitHub: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const content = atob(data.content); // Décode le contenu en Base64
+                const sha = data.sha; // On stocke le SHA pour les mises à jour ultérieures
+                localStorage.setItem('githubFileSha', sha);
+                
+                const parsedData = JSON.parse(content);
+                
+                machines = parsedData.machines || [];
+                rooms = parsedData.rooms || [];
+                history = parsedData.history || {};
+                resources = parsedData.resources || {};
+                
+                // Sauvegarder en local aussi
+                localStorage.setItem('machines', JSON.stringify(machines));
+                localStorage.setItem('rooms', JSON.stringify(rooms));
+                localStorage.setItem('history', JSON.stringify(history));
+                localStorage.setItem('resources', JSON.stringify(resources));
+                
+                updateRoomSelect();
+                updateMachineList();
+                updateSyncStatus("Synchronisé");
+                
+                return true;
+            } catch (error) {
+                console.error("Erreur lors du chargement depuis GitHub :", error);
+                updateSyncStatus("Erreur de synchronisation: " + error.message);
+                return false;
+            }
+        }
+        
+        // Fonction pour sauvegarder les données vers GitHub
+        async function saveToGitHub() {
+            try {
+                updateSyncStatus("Sauvegarde vers GitHub...");
+                
+                if (!githubCredentials.owner || !githubCredentials.repo || !githubCredentials.token) {
+                    throw new Error("Identifiants GitHub manquants");
+                }
+                
+                const url = `https://api.github.com/repos/${githubCredentials.owner}/${githubCredentials.repo}/contents/${githubCredentials.filename}`;
+                
+                // Préparer les données à sauvegarder
+                const dataToSave = {
+                    machines,
+                    rooms,
+                    history,
+                    resources
+                };
+                
+                // Convertir en JSON et encoder en Base64
+                const content = btoa(JSON.stringify(dataToSave, null, 2));
+                
+                // Récupérer le SHA du fichier s'il existe
+                const sha = localStorage.getItem('githubFileSha');
+                
+                // Préparer le payload pour GitHub API
+                const payload = {
+                    message: "Mise à jour des données GMAO",
+                    content: content
+                };
+                
+                // Si le fichier existe déjà, ajouter son SHA pour le mettre à jour
+                if (sha) {
+                    payload.sha = sha;
+                }
+                
+                // Envoyer la requête à GitHub
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${githubCredentials.token}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Erreur GitHub: ${response.status} - ${errorData.message}`);
+                }
+                
+                const responseData = await response.json();
+                
+                // Mettre à jour le SHA
+                localStorage.setItem('githubFileSha', responseData.content.sha);
+                
+                updateSyncStatus("Synchronisé");
+                return true;
+            } catch (error) {
+                console.error("Erreur lors de la sauvegarde vers GitHub :", error);
+                updateSyncStatus("Erreur de sauvegarde: " + error.message);
+                return false;
+            }
+        }
+        
+        // Fonction pour synchroniser avec GitHub (charger puis sauvegarder)
+        async function syncWithGitHub() {
+            try {
+                // Demander confirmation
+                if (!confirm("Voulez-vous synchroniser les données avec GitHub? Cela pourrait écraser les données locales ou distantes.")) {
+                    return;
+                }
+                
+                const loadResult = await loadFromGitHub();
+                if (loadResult) {
+                    alert("Données chargées depuis GitHub avec succès.");
+                } else {
+                    // Si le chargement échoue mais que nous avons des données locales, proposer de les envoyer
+                    if (confirm("Impossible de charger les données depuis GitHub. Voulez-vous envoyer vos données locales vers GitHub?")) {
+                        const saveResult = await saveToGitHub();
+                        if (saveResult) {
+                            alert("Données locales sauvegardées sur GitHub avec succès.");
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Erreur de synchronisation :", error);
+                updateSyncStatus("Erreur de synchronisation");
+            }
+        }
+        
+        // Fonction pour sauvegarder les données localement
         function saveData() {
             localStorage.setItem('machines', JSON.stringify(machines));
             localStorage.setItem('rooms', JSON.stringify(rooms));
@@ -393,11 +606,6 @@
             }
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
-            updateRoomSelect();
-            updateMachineList();
-        });
-
         // Empêcher la fermeture des modals en cliquant à l'extérieur
         window.onclick = function(event) {
             const deleteRoomsModal = document.getElementById("deleteRoomsModal");
@@ -411,6 +619,18 @@
                 closeDeleteMachinesModal();
             }
         };
+
+        // Charger les identifiants GitHub au démarrage
+        document.addEventListener("DOMContentLoaded", () => {
+            // Afficher les valeurs actuelles dans les champs
+            document.getElementById("repo-owner").value = githubCredentials.owner;
+            document.getElementById("repo-name").value = githubCredentials.repo;
+            document.getElementById("github-token").value = githubCredentials.token;
+            document.getElementById("data-filename").value = githubCredentials.filename || 'gmao_data.json';
+            
+            updateRoomSelect();
+            updateMachineList();
+        });
     </script>
 </body>
 </html>
