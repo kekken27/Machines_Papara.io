@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMAO - Gestion des Machines</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; }
+        .container { padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+        th { background-color: #f4f4f4; }
+        .btn { padding: 8px 12px; background-color: blue; color: white; border: none; cursor: pointer; margin-right: 5px; border-radius: 3px; }
+        .btn-danger { background-color: red; }
+        .btn-warning { background-color: orange; }
+        .textarea { width: 100%; height: 50px; margin-top: 5px; }
+        .resource-item { margin: 5px 0; padding: 5px; background-color: #f9f9f9; display: flex; justify-content: space-between; align-items: center; }
+        .resource-list { margin-top: 10px; max-height: 150px; overflow-y: auto; }
+        .delete-button { color: red; cursor: pointer; margin-left: 10px; }
+        .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 50%; border-radius: 5px; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: black; }
+        .hidden { display: none; }
+        .history-item { padding: 4px; border-bottom: 1px solid #eee; }
+        .history-panne { color: #d9534f; }
+        .history-resolution { color: #5cb85c; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gestion des Machines & Salles</h1>
+        
+        <div class="form-group">
+            <input type="text" id="roomName" placeholder="Nom de la salle">
+            <button class="btn" onclick="addRoom()">Ajouter Salle</button>
+            <button class="btn btn-warning" onclick="showDeleteRoomsModal()">Supprimer Salle</button>
+        </div>
+        
+        <div class="form-group">
+            <input type="text" id="machineName" placeholder="Nom de la machine">
+            <select id="roomSelect"></select>
+            <button class="btn" onclick="addMachine()">Ajouter Machine</button>
+            <button class="btn btn-warning" onclick="showDeleteMachinesModal()">Supprimer Machine</button>
+        </div>
+        
+        <button class="btn" onclick="exportData()">Exporter les données</button>
+        <input type="file" id="importFile" onchange="importData(event)">
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nom</th>
+                    <th>Salle</th>
+                    <th>Statut</th>
+                    <th>Historique Pannes</th>
+                    <th>Historique Résolutions</th>
+                    <th>Ressources</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="machineList"></tbody>
+        </table>
+    </div>
+    
+    <!-- Modal pour supprimer des salles -->
+    <div id="deleteRoomsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDeleteRoomsModal()">&times;</span>
+            <h2>Supprimer des salles</h2>
+            <div id="roomsList"></div>
+            <p class="hidden" id="roomWarning" style="color: red;">Attention: Des machines sont associées à cette salle. Elles seront également supprimées.</p>
+            <button class="btn" onclick="closeDeleteRoomsModal()">Annuler</button>
+        </div>
+    </div>
+    
+    <!-- Modal pour supprimer des machines -->
+    <div id="deleteMachinesModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDeleteMachinesModal()">&times;</span>
+            <h2>Supprimer des machines</h2>
+            <div id="machinesList"></div>
+            <button class="btn" onclick="closeDeleteMachinesModal()">Annuler</button>
+        </div>
+    </div>
+    
+    <script>
+        let machines = JSON.parse(localStorage.getItem('machines')) || [];
+        let rooms = JSON.parse(localStorage.getItem('rooms')) || [];
+        let history = JSON.parse(localStorage.getItem('history')) || {};
+        let resources = JSON.parse(localStorage.getItem('resources')) || {};
+
+        function saveData() {
+            localStorage.setItem('machines', JSON.stringify(machines));
+            localStorage.setItem('rooms', JSON.stringify(rooms));
+            localStorage.setItem('history', JSON.stringify(history));
+            localStorage.setItem('resources', JSON.stringify(resources));
+        }
+
+        function exportData() {
+            const data = { machines, rooms, history, resources };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "gmao_data.json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = JSON.parse(e.target.result);
+                machines = data.machines || [];
+                rooms = data.rooms || [];
+                history = data.history || {};
+                resources = data.resources || {};
+                saveData();
+                updateRoomSelect();
+                updateMachineList();
+            };
+            reader.readAsText(file);
+        }
+
+        function addRoom() {
+            const roomName = document.getElementById("roomName").value;
+            if (roomName && !rooms.includes(roomName)) {
+                rooms.push(roomName);
+                updateRoomSelect();
+                saveData();
+                document.getElementById("roomName").value = "";
+            }
+        }
+
+        function updateRoomSelect() {
+            const select = document.getElementById("roomSelect");
+            select.innerHTML = "";
+            rooms.forEach(room => {
+                let option = document.createElement("option");
+                option.value = room;
+                option.textContent = room;
+                select.appendChild(option);
+            });
+        }
+
+        function addMachine() {
+            const machineName = document.getElementById("machineName").value;
+            const roomSelect = document.getElementById("roomSelect").value;
+            if (machineName && roomSelect) {
+                let id = 1;
+                if (machines.length > 0) {
+                    id = Math.max(...machines.map(m => m.id)) + 1;
+                }
+                machines.push({ id, name: machineName, room: roomSelect, status: "En service" });
+                history[id] = [];
+                resources[id] = [];
+                updateMachineList();
+                saveData();
+                document.getElementById("machineName").value = "";
+            }
+        }
+
+        function updateMachineList() {
+            const tbody = document.getElementById("machineList");
+            tbody.innerHTML = "";
+            machines.forEach(machine => {
+                // Diviser l'historique en pannes et résolutions
+                const pannes = [];
+                const resolutions = [];
+                
+                if (history[machine.id]) {
+                    history[machine.id].forEach(entry => {
+                        if (entry.status === "En panne") {
+                            pannes.push(entry);
+                        } else if (entry.status === "En service") {
+                            resolutions.push(entry);
+                        }
+                    });
+                }
+                
+                let row = `<tr>
+                    <td>${machine.id}</td>
+                    <td>${machine.name}</td>
+                    <td>${machine.room}</td>
+                    <td>${machine.status}</td>
+                    <td>
+                        ${pannes.map(entry => `<div class="history-item history-panne">${entry.timestamp} - ${entry.description}</div>`).join("") || "Aucune panne enregistrée"}
+                    </td>
+                    <td>
+                        ${resolutions.map(entry => `<div class="history-item history-resolution">${entry.timestamp} - ${entry.description}</div>`).join("") || "Aucune résolution enregistrée"}
+                    </td>
+                    <td>
+                        <form id="uploadForm_${machine.id}" enctype="multipart/form-data">
+                            <input type="file" id="file_${machine.id}">
+                            <button type="button" class="btn" onclick="uploadResource(${machine.id})">Ajouter fichier</button>
+                        </form>
+                        <div class="resource-list" id="resourceList_${machine.id}">
+                            ${renderResourceList(machine.id)}
+                        </div>
+                    </td>
+                    <td>
+                        <textarea class='textarea' id='issue_${machine.id}' placeholder='Décrire le problème'></textarea>
+                        <button class='btn btn-danger' onclick='updateStatus(${machine.id}, "En panne")'>Signaler Panne</button>
+                        <textarea class='textarea' id='resolution_${machine.id}' placeholder='Décrire la résolution'></textarea>
+                        <button class='btn' onclick='updateStatus(${machine.id}, "En service")'>Remettre en Service</button>
+                    </td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function renderResourceList(machineId) {
+            if (!resources[machineId] || resources[machineId].length === 0) {
+                return "<div>Aucune ressource</div>";
+            }
+            
+            return resources[machineId].map((resource, index) => `
+                <div class="resource-item">
+                    <span>${resource.name}</span>
+                    <div>
+                        <a href="${resource.data}" download="${resource.name}" class="btn" style="padding: 3px 6px; font-size: 12px;">Télécharger</a>
+                        <button class="btn btn-danger" style="padding: 3px 6px; font-size: 12px;" onclick="deleteResource(${machineId}, ${index})">Supprimer</button>
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        function uploadResource(machineId) {
+            const fileInput = document.getElementById(`file_${machineId}`);
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert("Veuillez sélectionner un fichier");
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (!resources[machineId]) {
+                    resources[machineId] = [];
+                }
+                
+                resources[machineId].push({
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    data: e.target.result,
+                    uploadDate: new Date().toLocaleString()
+                });
+                
+                saveData();
+                updateResourceList(machineId);
+                fileInput.value = "";
+            };
+            
+            reader.readAsDataURL(file);
+        }
+
+        function updateResourceList(machineId) {
+            const resourceList = document.getElementById(`resourceList_${machineId}`);
+            resourceList.innerHTML = renderResourceList(machineId);
+        }
+
+        function deleteResource(machineId, index) {
+            if (confirm("Êtes-vous sûr de vouloir supprimer cette ressource ?")) {
+                resources[machineId].splice(index, 1);
+                saveData();
+                updateResourceList(machineId);
+            }
+        }
+
+        function updateStatus(id, status) {
+            let description = status === "En panne" ? document.getElementById(`issue_${id}`).value : document.getElementById(`resolution_${id}`).value;
+            if (!description) description = "Aucune description fournie";
+            
+            machines = machines.map(machine => machine.id === id ? { ...machine, status } : machine);
+            history[id] = history[id] || [];
+            history[id].push({ status, description, timestamp: new Date().toLocaleString() });
+            updateMachineList();
+            saveData();
+        }
+
+        // Fonctions pour supprimer des salles
+        function showDeleteRoomsModal() {
+            const roomsList = document.getElementById("roomsList");
+            roomsList.innerHTML = "";
+            
+            rooms.forEach(room => {
+                const hasAssociatedMachines = machines.some(machine => machine.room === room);
+                
+                const roomDiv = document.createElement("div");
+                roomDiv.className = "resource-item";
+                
+                const roomName = document.createElement("span");
+                roomName.textContent = room;
+                
+                const deleteButton = document.createElement("button");
+                deleteButton.className = "btn btn-danger";
+                deleteButton.textContent = "Supprimer";
+                deleteButton.onclick = function() {
+                    if (hasAssociatedMachines) {
+                        document.getElementById("roomWarning").classList.remove("hidden");
+                        if (confirm(`Attention: Des machines sont associées à la salle "${room}". Elles seront également supprimées. Voulez-vous continuer?`)) {
+                            deleteRoom(room);
+                        }
+                    } else {
+                        deleteRoom(room);
+                    }
+                };
+                
+                roomDiv.appendChild(roomName);
+                roomDiv.appendChild(deleteButton);
+                roomsList.appendChild(roomDiv);
+            });
+            
+            document.getElementById("deleteRoomsModal").style.display = "block";
+        }
+
+        function closeDeleteRoomsModal() {
+            document.getElementById("deleteRoomsModal").style.display = "none";
+            document.getElementById("roomWarning").classList.add("hidden");
+        }
+
+        function deleteRoom(roomName) {
+            // Supprimer toutes les machines associées à cette salle
+            const machinesToDelete = machines.filter(machine => machine.room === roomName);
+            machinesToDelete.forEach(machine => {
+                // Supprimer l'historique et les ressources des machines
+                delete history[machine.id];
+                delete resources[machine.id];
+            });
+            
+            // Filtrer les machines pour ne garder que celles qui ne sont pas dans cette salle
+            machines = machines.filter(machine => machine.room !== roomName);
+            
+            // Supprimer la salle
+            rooms = rooms.filter(room => room !== roomName);
+            
+            saveData();
+            updateRoomSelect();
+            updateMachineList();
+            closeDeleteRoomsModal();
+        }
+
+        // Fonctions pour supprimer des machines
+        function showDeleteMachinesModal() {
+            const machinesList = document.getElementById("machinesList");
+            machinesList.innerHTML = "";
+            
+            machines.forEach(machine => {
+                const machineDiv = document.createElement("div");
+                machineDiv.className = "resource-item";
+                
+                const machineName = document.createElement("span");
+                machineName.textContent = `${machine.name} (Salle: ${machine.room})`;
+                
+                const deleteButton = document.createElement("button");
+                deleteButton.className = "btn btn-danger";
+                deleteButton.textContent = "Supprimer";
+                deleteButton.onclick = function() {
+                    deleteMachine(machine.id);
+                };
+                
+                machineDiv.appendChild(machineName);
+                machineDiv.appendChild(deleteButton);
+                machinesList.appendChild(machineDiv);
+            });
+            
+            document.getElementById("deleteMachinesModal").style.display = "block";
+        }
+
+        function closeDeleteMachinesModal() {
+            document.getElementById("deleteMachinesModal").style.display = "none";
+        }
+
+        function deleteMachine(machineId) {
+            if (confirm(`Êtes-vous sûr de vouloir supprimer cette machine ?`)) {
+                // Supprimer l'historique et les ressources de la machine
+                delete history[machineId];
+                delete resources[machineId];
+                
+                // Filtrer les machines pour ne garder que celles qui n'ont pas cet id
+                machines = machines.filter(machine => machine.id !== machineId);
+                
+                saveData();
+                updateMachineList();
+                closeDeleteMachinesModal();
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateRoomSelect();
+            updateMachineList();
+        });
+
+        // Empêcher la fermeture des modals en cliquant à l'extérieur
+        window.onclick = function(event) {
+            const deleteRoomsModal = document.getElementById("deleteRoomsModal");
+            const deleteMachinesModal = document.getElementById("deleteMachinesModal");
+            
+            if (event.target === deleteRoomsModal) {
+                closeDeleteRoomsModal();
+            }
+            
+            if (event.target === deleteMachinesModal) {
+                closeDeleteMachinesModal();
+            }
+        };
+    </script>
+</body>
+</html>
