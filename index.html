@@ -623,8 +623,8 @@
         // Charger les identifiants GitHub au démarrage
         document.addEventListener("DOMContentLoaded", () => {
             // Afficher les valeurs actuelles dans les champs
-            document.getElementById("repo-owner").value = githubCredentials.owner;
-            document.getElementById("repo-name").value = githubCredentials.repo;
+            document.getElementById("repo-owner").value = githubCredentials.owner || 'kekken27';
+            document.getElementById("repo-name").value = githubCredentials.repo || 'Machines_Papara.io';
             document.getElementById("github-token").value = githubCredentials.token;
             document.getElementById("data-filename").value = githubCredentials.filename || 'gmao_data.json';
             
