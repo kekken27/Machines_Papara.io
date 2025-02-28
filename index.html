@@ -428,7 +428,7 @@
                     <td>
                         <form id="uploadForm_${machine.id}" enctype="multipart/form-data">
                             <input type="file" id="file_${machine.id}">
-                            <button type="button" class="btn" onclick="uploadResource(${machine.id})">Ajouter fichier</button>
+                            <button type="button" class="btn" onclick="uploadResourceToGitHub(${machine.id})">Envoyer sur GitHub</button>
                         </form>
                         <div class="resource-list" id="resourceList_${machine.id}">
                             ${renderResourceList(machine.id)}
@@ -445,21 +445,182 @@
             });
         }
 
-        function renderResourceList(machineId) {
-            if (!resources[machineId] || resources[machineId].length === 0) {
-                return "<div>Aucune ressource</div>";
-            }
-            
-            return resources[machineId].map((resource, index) => `
-                <div class="resource-item">
-                    <span>${resource.name}</span>
-                    <div>
-                        <a href="${resource.data}" download="${resource.name}" class="btn" style="padding: 3px 6px; font-size: 12px;">Télécharger</a>
-                        <button class="btn btn-danger" style="padding: 3px 6px; font-size: 12px;" onclick="deleteResource(${machineId}, ${index})">Supprimer</button>
-                    </div>
-                </div>
-            `).join("");
+	async function deleteResource(machineId, index) {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette ressource ?")) {
+        return;
+    }
+
+    try {
+        updateSyncStatus("Suppression du fichier depuis GitHub...");
+
+        if (!githubCredentials.owner || !githubCredentials.repo || !githubCredentials.token) {
+            throw new Error("Identifiants GitHub manquants");
         }
+
+        const resource = resources[machineId][index];
+        const fileName = `resources/${machineId}/${resource.name}`;
+        const url = `https://api.github.com/repos/${githubCredentials.owner}/${githubCredentials.repo}/contents/${fileName}`;
+
+        // Récupérer le SHA du fichier
+        const shaResponse = await fetch(url, {
+            method: "GET",
+            headers: {
+                "Authorization": `token ${githubCredentials.token}`,
+                "Accept": "application/vnd.github.v3+json"
+            }
+        });
+
+        if (!shaResponse.ok) {
+            throw new Error("Le fichier n'existe pas sur GitHub.");
+        }
+
+        const shaData = await shaResponse.json();
+        const sha = shaData.sha;
+
+        // Supprimer le fichier de GitHub
+        const deleteResponse = await fetch(url, {
+            method: "DELETE",
+            headers: {
+                "Authorization": `token ${githubCredentials.token}`,
+                "Accept": "application/vnd.github.v3+json"
+            },
+            body: JSON.stringify({
+                message: `Suppression de la ressource ${resource.name} pour la machine ${machineId}`,
+                sha: sha,
+                branch: "main"
+            })
+        });
+
+        if (!deleteResponse.ok) {
+            throw new Error("Erreur lors de la suppression du fichier.");
+        }
+
+        // Supprimer du tableau local
+        resources[machineId].splice(index, 1);
+        saveData();
+        updateResourceList(machineId);
+
+        updateSyncStatus("Fichier supprimé de GitHub !");
+        alert("Fichier supprimé avec succès !");
+    } catch (error) {
+        console.error("Erreur lors de la suppression du fichier :", error);
+        updateSyncStatus("Erreur lors de la suppression");
+    }
+}
+
+
+        function renderResourceList(machineId) {
+    if (!resources[machineId] || resources[machineId].length === 0) {
+        return "<div>Aucune ressource</div>";
+    }
+
+    return resources[machineId].map((resource, index) => `
+        <div class="resource-item">
+            <span>${resource.name}</span>
+            <div>
+                <a href="${resource.url}" target="_blank" class="btn" style="padding: 3px 6px; font-size: 12px;">Voir / Télécharger</a>
+                <button class="btn btn-danger" style="padding: 3px 6px; font-size: 12px;" onclick="deleteResource(${machineId}, ${index})">Supprimer</button>
+            </div>
+        </div>
+    `).join("");
+}
+
+
+	async function uploadResourceToGitHub(machineId) {
+    const fileInput = document.getElementById(`file_${machineId}`);
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert("Veuillez sélectionner un fichier");
+        return;
+    }
+
+    try {
+        updateSyncStatus("Téléchargement du fichier vers GitHub...");
+
+        if (!githubCredentials.owner || !githubCredentials.repo || !githubCredentials.token) {
+            throw new Error("Identifiants GitHub manquants");
+        }
+
+        const reader = new FileReader();
+        reader.onload = async function (e) {
+            const fileContent = e.target.result.split(',')[1]; // Extraire le contenu encodé en Base64
+            const fileName = `resources/${machineId}/${file.name}`;
+
+            // URL de l'API GitHub pour ajouter un fichier
+            const url = `https://api.github.com/repos/${githubCredentials.owner}/${githubCredentials.repo}/contents/${fileName}`;
+
+            // Vérifier si le fichier existe déjà sur GitHub pour récupérer son SHA
+            let sha = null;
+            const shaResponse = await fetch(url, {
+                method: "GET",
+                headers: {
+                    "Authorization": `token ${githubCredentials.token}`,
+                    "Accept": "application/vnd.github.v3+json"
+                }
+            });
+
+            if (shaResponse.ok) {
+                const shaData = await shaResponse.json();
+                sha = shaData.sha;
+            }
+
+            // Création du payload pour GitHub
+            const payload = {
+                message: `Ajout de la ressource ${file.name} pour la machine ${machineId}`,
+                content: fileContent,
+                branch: "main" // Modifier si vous utilisez une autre branche
+            };
+
+            if (sha) {
+                payload.sha = sha; // Ajout du SHA pour éviter d’écraser un fichier existant
+            }
+
+            // Envoyer le fichier vers GitHub
+            const uploadResponse = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    "Authorization": `token ${githubCredentials.token}`,
+                    "Accept": "application/vnd.github.v3+json",
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!uploadResponse.ok) {
+                const errorData = await uploadResponse.json();
+                throw new Error(`Erreur GitHub: ${uploadResponse.status} - ${errorData.message}`);
+            }
+
+            // Récupérer l'URL de téléchargement
+            const responseData = await uploadResponse.json();
+            const githubFileUrl = responseData.content.html_url;
+
+            // Enregistrer le lien dans les ressources de la machine
+            if (!resources[machineId]) {
+                resources[machineId] = [];
+            }
+
+            resources[machineId].push({
+                name: file.name,
+                url: githubFileUrl,
+                uploadDate: new Date().toLocaleString()
+            });
+
+            saveData();
+            updateResourceList(machineId);
+            fileInput.value = "";
+
+            updateSyncStatus("Fichier téléchargé sur GitHub !");
+            alert("Fichier sauvegardé avec succès !");
+        };
+
+        reader.readAsDataURL(file);
+    } catch (error) {
+        console.error("Erreur lors de l'upload du fichier sur GitHub :", error);
+        updateSyncStatus("Erreur lors de l'upload");
+    }
+}
 
         function uploadResource(machineId) {
             const fileInput = document.getElementById(`file_${machineId}`);
