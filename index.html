@@ -62,6 +62,7 @@
         
         <button class="btn" onclick="syncWithGitHub()">Synchroniser avec GitHub</button>
         <button class="btn" onclick="exportData()">Exporter les données</button>
+        <button class="btn" onclick="saveDataGithub()">Exporter les données vers Github</button>
         <input type="file" id="importFile" onchange="importData(event)">
         
         <table>
@@ -322,6 +323,9 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+        }
+
+        function saveDataGithub(){
             const saveResult = await saveToGitHub();
                         if (saveResult) {
                             alert("Données locales sauvegardées sur GitHub avec succès.");
