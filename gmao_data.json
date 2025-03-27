@@ -10,7 +10,7 @@
       "id": 2,
       "name": "Monte charge",
       "room": "Atelier électrotechnique",
-      "status": "En service"
+      "status": "En panne"
     },
     {
       "id": 3,
@@ -57,7 +57,13 @@
   ],
   "history": {
     "1": [],
-    "2": [],
+    "2": [
+      {
+        "status": "En panne",
+        "description": "Alim HS",
+        "timestamp": "26/03/2025 16:12:26"
+      }
+    ],
     "3": [],
     "4": [],
     "5": [],
